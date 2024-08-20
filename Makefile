@@ -1,9 +1,7 @@
-# Variables
 TARGET = tc.o
 INTERFACE = enp1s0
 CFLAGS = -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/include/x86_64-linux-gnu/bits -I/usr/include/x86_64-linux-gnu/sys
 
-# Dependencies installation
 .PHONY: install-deps
 install-deps:
 	sudo apt update
@@ -16,9 +14,9 @@ $(TARGET): tc.c
 # Load the eBPF program
 .PHONY: load
 load: $(TARGET)
-	sudo tc qdisc add dev $(INTERFACE) clsact
-	sudo tc filter add dev $(INTERFACE) ingress bpf da obj $(TARGET) sec tc
-	sudo tc filter add dev $(INTERFACE) egress bpf da obj $(TARGET) sec tc
+	sudo tc qdisc add dev $(INTERFACE) clsact || true
+	sudo tc filter add dev $(INTERFACE) ingress bpf da obj $(TARGET) sec tc_ingress
+	sudo tc filter add dev $(INTERFACE) egress bpf da obj $(TARGET) sec tc_egress
 
 # View bpf_printk output
 .PHONY: view
@@ -33,6 +31,6 @@ clean:
 	sudo tc qdisc del dev $(INTERFACE) clsact
 	rm -f $(TARGET)
 
-# All
 .PHONY: all
 all: install-deps $(TARGET) load
+

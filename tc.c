@@ -5,12 +5,13 @@
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <bpf/bpf_helpers.h>
-#include <bpf/bpf_endian.h> 
-SEC("tc")
-int tc_ingress(struct __sk_buff *skb) {
+#include <bpf/bpf_endian.h>
+
+SEC("tc_ingress")
+int tc_ing(struct __sk_buff *skb) {
     void *data = (void *)(unsigned long)skb->data;
     void *data_end = (void *)(unsigned long)skb->data_end;
-    // Eth header
+    // Ethernet header
     struct ethhdr *eth = data;
     if ((void *)(eth + 1) > data_end)
         return TC_ACT_SHOT; 
@@ -24,7 +25,7 @@ int tc_ingress(struct __sk_buff *skb) {
     if (ip->protocol != IPPROTO_TCP)
         return TC_ACT_OK; 
 
-    // parse tcp header
+    // TCP header
     struct tcphdr *tcp = (struct tcphdr *)(ip + 1);
     if ((void *)(tcp + 1) > data_end)
         return TC_ACT_SHOT; 
@@ -45,11 +46,12 @@ int tc_ingress(struct __sk_buff *skb) {
                byte4, byte3, byte2, byte1, bytex4, bytex3, bytex2, bytex1, src_port, dst_port, ip_version);
     return TC_ACT_OK;
 }
-SEC("tc")
-int tc_egress(struct __sk_buff *skb) {
-        void *data = (void *)(unsigned long)skb->data;
+
+SEC("tc_egress")
+int tc_egr(struct __sk_buff *skb) {
+    void *data = (void *)(unsigned long)skb->data;
     void *data_end = (void *)(unsigned long)skb->data_end;
-    // Eth header
+    // Ethernet header
     struct ethhdr *eth = data;
     if ((void *)(eth + 1) > data_end)
         return TC_ACT_SHOT; 
@@ -63,7 +65,7 @@ int tc_egress(struct __sk_buff *skb) {
     if (ip->protocol != IPPROTO_TCP)
         return TC_ACT_OK; 
 
-    // parse tcp header
+    // TCP header
     struct tcphdr *tcp = (struct tcphdr *)(ip + 1);
     if ((void *)(tcp + 1) > data_end)
         return TC_ACT_SHOT; 
@@ -84,4 +86,6 @@ int tc_egress(struct __sk_buff *skb) {
                byte4, byte3, byte2, byte1, bytex4, bytex3, bytex2, bytex1, src_port, dst_port, ip_version);
     return TC_ACT_OK;
 }
+
 char _license[] SEC("license") = "GPL";
+
