@@ -83,6 +83,5 @@ int tc_egress(struct __sk_buff *skb) {
     bpf_printk("Egress: src_ip=%d.%d.%d.%d, dst_ip=%d.%d.%d.%d, src_port=%d, dst_port=%d, ip_version=%d\n",
                byte4, byte3, byte2, byte1, bytex4, bytex3, bytex2, bytex1, src_port, dst_port, ip_version);
     return TC_ACT_OK;
-    return TC_ACT_OK;
 }
 char _license[] SEC("license") = "GPL";
