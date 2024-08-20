@@ -1,6 +1,7 @@
 # Variables
 TARGET = tc.o
 INTERFACE = enp1s0
+CFLAGS = -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/include/x86_64-linux-gnu/bits -I/usr/include/x86_64-linux-gnu/sys
 
 # Dependencies installation
 .PHONY: install-deps
@@ -10,7 +11,7 @@ install-deps:
 
 # Compile the eBPF program
 $(TARGET): tc.c
-	clang -O2 -target bpf -c tc.c -o $(TARGET)
+	clang $(CFLAGS) -O2 -target bpf -c tc.c -o $(TARGET)
 
 # Load the eBPF program
 .PHONY: load
@@ -35,4 +36,3 @@ clean:
 # All
 .PHONY: all
 all: install-deps $(TARGET) load
-
