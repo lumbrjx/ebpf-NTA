@@ -6,6 +6,7 @@
 
 - Packet Inspection: Analyze incoming and outgoing packets on a specific network interface.
 - Real-Time Logging: Use bpf_printk to log packet details directly from the kernel.
+- User-Space Control with Go: A Go program is provided for interacting with the eBPF program in user space, offering an easy and flexible way to control and retrieve data from the eBPF program.
 - Easy Setup: Automated setup and cleanup using a Makefile.
 
 ## Getting Started
@@ -23,6 +24,7 @@ make all
 - Linux with eBPF support
 - Clang/LLVM
 - Kernel headers
+- Go (for user-space control)
 
 # License
 
