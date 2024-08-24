@@ -1,5 +1,5 @@
 TARGET = tc.o
-INTERFACE = enp1s0
+INTERFACE = enp1s0 
 US_DIR = user_space 
 CFLAGS = -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/include/x86_64-linux-gnu/bits -I/usr/include/x86_64-linux-gnu/sys -I/usr/include/bpf
 
@@ -25,6 +25,15 @@ load: $(TARGET)
 view:
 	sudo cat /sys/kernel/debug/tracing/trace_pipe
 
+.PHONY: view-tcp
+view-tcp:
+	sudo cat /sys/kernel/debug/tracing/trace_pipe | grep TCP
+
+.PHONY: view-udp
+view-udp:
+	sudo cat /sys/kernel/debug/tracing/trace_pipe | grep UDP
+
+
 # build user space program
 .PHONY: build-US
 build-US:
@@ -46,4 +55,4 @@ clean:
 
 # All
 .PHONY: all
-all: install-deps $(TARGET) load
+all: install-deps $(TARGET) build-US start-US
