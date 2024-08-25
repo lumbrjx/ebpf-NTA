@@ -1,15 +1,29 @@
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/perf"
 	"github.com/vishvananda/netlink"
 )
+
+type Event struct {
+	SrcIP     uint32
+	DstIP     uint32
+	SrcPort   uint16
+	DstPort   uint16
+	Protocol  uint8
+	Direction uint8
+	TcpFlags  uint8
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -17,20 +31,22 @@ func main() {
 	}
 	ifaceName := os.Args[1]
 
-	spec, err := ebpf.LoadCollectionSpec("tc.o")
+	spec, err := loadBpfSpec("tc.o")
 	if err != nil {
-		log.Fatalf("loading spec: %v", err)
+		log.Fatalf("loading eBPF spec: %v", err)
 	}
 
 	var objs struct {
 		TcIngress *ebpf.Program `ebpf:"tc_ingress"`
 		TcEgress  *ebpf.Program `ebpf:"tc_egress"`
+		Events    *ebpf.Map     `ebpf:"events"`
 	}
 	if err := spec.LoadAndAssign(&objs, nil); err != nil {
 		log.Fatalf("loading objects: %v", err)
 	}
 	defer objs.TcIngress.Close()
 	defer objs.TcEgress.Close()
+	defer objs.Events.Close()
 
 	link, err := netlink.LinkByName(ifaceName)
 	if err != nil {
@@ -42,7 +58,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("listing qdiscs: %v", err)
 	}
-
 	clsactExists := false
 	for _, qdisc := range qdiscs {
 		if _, ok := qdisc.(*netlink.GenericQdisc); ok &&
@@ -51,7 +66,6 @@ func main() {
 			break
 		}
 	}
-
 	if !clsactExists {
 		qdisc := &netlink.GenericQdisc{
 			QdiscAttrs: netlink.QdiscAttrs{
@@ -61,7 +75,6 @@ func main() {
 			},
 			QdiscType: "clsact",
 		}
-
 		if err := netlink.QdiscAdd(qdisc); err != nil {
 			log.Fatalf("adding clsact qdisc: %v", err)
 		}
@@ -81,7 +94,6 @@ func main() {
 		Name:         "tc_ingress",
 		DirectAction: true,
 	}
-
 	if err := netlink.FilterAdd(ingressFilter); err != nil {
 		log.Fatalf("adding ingress filter: %v", err)
 	}
@@ -98,11 +110,47 @@ func main() {
 		Name:         "tc_egress",
 		DirectAction: true,
 	}
-
 	if err := netlink.FilterAdd(egressFilter); err != nil {
 		log.Fatalf("adding egress filter: %v", err)
 	}
 	fmt.Println("Added egress filter")
+
+	// perf reader
+	reader, err := perf.NewReader(objs.Events, os.Getpagesize())
+	if err != nil {
+		log.Fatalf("creating perf reader: %v", err)
+	}
+	defer reader.Close()
+
+	// read events
+	go func() {
+		for {
+			record, err := reader.Read()
+			if err != nil {
+				if err == perf.ErrClosed {
+					return
+				}
+				log.Printf("reading from perf event reader: %s", err)
+				continue
+			}
+
+			if record.LostSamples != 0 {
+				log.Printf(
+					"perf event ring buffer full, dropped %d samples",
+					record.LostSamples,
+				)
+				continue
+			}
+
+			var event Event
+			if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event); err != nil {
+				log.Printf("parsing perf event: %s", err)
+				continue
+			}
+			printPacket(event)
+
+		}
+	}()
 
 	fmt.Printf("eBPF programs attached to interface %s\n", ifaceName)
 
@@ -127,6 +175,7 @@ func main() {
 			}
 		}
 	}
+
 	filterss, err := netlink.FilterList(link, netlink.HANDLE_MIN_EGRESS)
 	if err != nil {
 		log.Printf("error listing egress filters: %v", err)
@@ -141,6 +190,7 @@ func main() {
 			}
 		}
 	}
+
 	qdisc := &netlink.GenericQdisc{
 		QdiscAttrs: netlink.QdiscAttrs{
 			LinkIndex: link.Attrs().Index,
@@ -149,10 +199,75 @@ func main() {
 		},
 		QdiscType: "clsact",
 	}
-
 	if err := netlink.QdiscDel(qdisc); err != nil {
 		log.Fatalf("deleting clsact qdisc: %v", err)
 	}
 	fmt.Println("Deleted clsact qdisc")
+}
+
+func intToIP(ip uint32) net.IP {
+	return net.IPv4(byte(ip), byte(ip>>8), byte(ip>>16), byte(ip>>24))
+}
+
+func loadBpfSpec(path string) (*ebpf.CollectionSpec, error) {
+	spec, err := ebpf.LoadCollectionSpec(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load BPF spec: %v", err)
+	}
+	if eventsMap, ok := spec.Maps["events"]; ok {
+		eventsMap.Type = ebpf.PerfEventArray
+	}
+
+	return spec, nil
+}
+func tcpFlagsToString(flags uint8) string {
+	flagNames := []struct {
+		mask uint8
+		name string
+	}{
+		{0x01, "FIN"},
+		{0x02, "SYN"},
+		{0x04, "RST"},
+		{0x08, "PSH"},
+		{0x10, "ACK"},
+		{0x20, "URG"},
+		{0x40, "ECE"},
+		{0x80, "CWR"},
+	}
+
+	var result []string
+	for _, f := range flagNames {
+		if flags&f.mask != 0 {
+			result = append(result, f.name)
+		}
+	}
+	if len(result) == 0 {
+		return "NONE"
+	}
+	return fmt.Sprintf("0x%x (%s)", flags, fmt.Sprintf("%s", result))
+}
+func printPacket(event Event) {
+	direction := "Ingress"
+	if event.Direction == 1 {
+		direction = "Egress"
+	}
+	flags := ""
+	protoc := "?"
+	s_msg := "%s %s: src=%s:%d -> dst=%s:%d | proto=%d | flags=%s\n"
+	switch event.Protocol {
+	case 6: // TCP
+		flags = tcpFlagsToString(event.TcpFlags)
+		protoc = "TCP"
+	case 17: // UDP
+		protoc = "UDP"
+		s_msg = "%s %s: src=%s:%d -> dst=%s:%d | proto=%d\n"
+	}
+	fmt.Printf(s_msg,
+		direction,
+		protoc,
+		intToIP(event.SrcIP), event.SrcPort,
+		intToIP(event.DstIP), event.DstPort,
+		event.Protocol,
+		flags)
 
 }

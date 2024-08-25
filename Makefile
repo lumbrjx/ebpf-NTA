@@ -11,7 +11,7 @@ install-deps:
 
 # Compile the eBPF program
 $(TARGET): tc.c
-	clang $(CFLAGS) -O2 -target bpf -c tc.c -o $(TARGET) 
+	clang $(CFLAGS) -O2 -g -target bpf -c tc.c -o $(TARGET) 
 
 # Load the eBPF program manually
 .PHONY: load
@@ -21,15 +21,15 @@ load: $(TARGET)
 	sudo tc filter add dev $(INTERFACE) egress bpf da obj $(TARGET) sec tc
 
 # View bpf_printk output
-.PHONY: view
+.PHONY: view-manual
 view:
 	sudo cat /sys/kernel/debug/tracing/trace_pipe
 
-.PHONY: view-tcp
+.PHONY: view-tcp-manual
 view-tcp:
 	sudo cat /sys/kernel/debug/tracing/trace_pipe | grep TCP
 
-.PHONY: view-udp
+.PHONY: view-udp-manual
 view-udp:
 	sudo cat /sys/kernel/debug/tracing/trace_pipe | grep UDP
 

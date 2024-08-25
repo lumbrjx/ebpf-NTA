@@ -62,7 +62,7 @@ Usage:
 
 make load
 ```
-4. view
+4. view *Deprecated*
 
 Description: Views the output of bpf_printk in the kernel trace pipe.
 
@@ -70,9 +70,9 @@ Usage:
 
 ```bash
 
-make view
+make view 
 ```
-5. view-tcp
+5. view-tcp *Deprecated*
 
 Description: Filters the trace_pipe output to show only TCP-related logs.
 
@@ -82,7 +82,7 @@ Usage:
 
 make view-tcp
 ```
-6. view-udp
+6. view-udp *Deprecated*
 
 Description: Filters the trace_pipe output to show only UDP-related logs.
 
